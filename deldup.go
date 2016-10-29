@@ -20,6 +20,7 @@ import (
 var cmdLineDirsIn = flag.String("dirs", ".", "search for duplicates in these dirs")
 var cmdLineDirsExclude = flag.String("exclude", "", "omit seraching in these dirs")
 
+// file length type
 type flen []int64
 func (a flen) Len() int { return len(a) }
 func (a flen) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
