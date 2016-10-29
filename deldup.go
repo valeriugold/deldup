@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	// "time"
 )
 
 var cmdLineDirsIn = flag.String("dirs", ".", "search for duplicates in these dirs")
