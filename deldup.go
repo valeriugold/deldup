@@ -55,9 +55,8 @@ func (x byFullName) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 type dirFiles struct {
 	dir	string
-	files	filesStats
+	dups	[]filesStats
 }
-
 
 var tokens = make(chan struct{}, 20)
 
@@ -112,8 +111,8 @@ func main() {
 	}
 
 	printDuplicatesSortedByLenght(&len5)
-	printDuplicatesSortedByDir(&len5)
-
+	tbl := getTblDuplicatesSortedByDir(&len5)
+	printDirFilesTabbed(tbl)
 	
 	// 	var sf []string
 	// 	for _, f := range lenToNames[length] {
@@ -367,7 +366,7 @@ func (a sldirpritype) Len() int { return len(a) }
 func (a sldirpritype) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a sldirpritype) Less(i, j int) bool { return a[i].pri < a[j].pri }
 
-func printDuplicatesSortedByDir(len5 *map[int64]*map[[md5.Size]byte]filesStats) {
+func getTblDuplicatesSortedByDir(len5 *map[int64]*map[[md5.Size]byte]filesStats) ([]dirFiles) {
 	// map with keys dir and values slices of filestats from that dir
 	dirs := make(map[string]filesStats)
 	var slDirPri sldirpritype
@@ -389,17 +388,18 @@ func printDuplicatesSortedByDir(len5 *map[int64]*map[[md5.Size]byte]filesStats) 
 		// sf.pri = len(dirs[sf.dir])
 		slDirPri[i].pri = len(dirs[sf.dir])
 	}
-	for _, sf := range slDirPri {
-		fmt.Printf("xxxx---- for %d, pri=%d\n", sf.dir, sf.pri)
-	}
+	// // print dirs for debug
+	// for _, sf := range slDirPri {
+	// 	fmt.Printf("xxxx---- for %d, pri=%d\n", sf.dir, sf.pri)
+	// }
 	sort.Sort(sort.Reverse(slDirPri))
-	fmt.Println(slDirPri)
+	// fmt.Println(slDirPri)
 
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, '.', 0)
+	var tbl []dirFiles
 	doneFile := make(map[string]bool)
 	for _, sf := range slDirPri {
-		// var headerDir string
+		var df dirFiles
+		df.dir = sf.dir
 		slFs := dirs[sf.dir]
 		// fmt.Fprintf(w, "dir=%s pri=%d \t same \t\n", sf.dir, sf.pri)
 		headerDir := fmt.Sprintf("dir=%s pri=%d \t same \t\n", sf.dir, sf.pri)
@@ -409,36 +409,49 @@ func printDuplicatesSortedByDir(len5 *map[int64]*map[[md5.Size]byte]filesStats) 
 				continue
 			}
 			if len(headerDir) > 0  {
-				fmt.Fprintf(w, "%s", headerDir)
+				//x//fmt.Fprintf(w, "%s", headerDir)
 				headerDir = ""
 			}
-			// fmt.Printf("    sum=%x\n", fs.md5sum)
+			var row filesStats
+			row = append(row, fs)
 			// print the initial file
 			doneFile[fs.fullName] = true
-			fmt.Fprintf(w, "  %s\t", fs.fullName)
+			//x//fmt.Fprintf(w, "  %s\t", fs.fullName)
 			slSameMd5 := (*(*len5)[fs.stats.Size()])[fs.md5sum]
-			// sort.Sort(byFullName(slSameMd5))
 			for _, f := range slSameMd5 {
 				if _, ok := doneFile[f.fullName]; !ok {
 					doneFile[f.fullName] = true
-					fmt.Fprintf(w, "  %s\t", f.fullName)
+					row = append(row, fs)
+					//x//fmt.Fprintf(w, "  %s\t", f.fullName)
 				}
 			}
-			// for _, slSameMd5 := range len5[fs.stats.Size()] {
-			// 	if _, ok := doneFile[fs.fullName]; !ok {
-			// 		doneFile[fs.fullName] = true
-			// 		fmt.Printf("    %s", fs.fullName)
-			// 	}
-			// }
+			df.dups = append(df.dups, row)
+			//x//fmt.Fprintf(w, "\n")
+		}
+		if len(df.dups) > 0 {
+			tbl = append(tbl, df)
+		}
+	}
+	return tbl
+}
+
+func printDirFilesTabbed(tbl []dirFiles) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, '.', 0)
+	for _, df := range tbl {
+		fmt.Fprintf(w, "dir=%s rows=%d \t same\n", df.dir, len(df.dups))
+		for _, row := range df.dups {
+			for _, f := range row {
+				fmt.Fprintf(w, "  %s\t", f.fullName)
+			}
 			fmt.Fprintf(w, "\n")
 		}
 	}
 	w.Flush()
-	// sort.Sort(sliceDirs)
-	// for d := range sliceDirs {
-	// }
-	
 }
+
+// func printDirFilesHtmlTable(tbl []dirFiles) {
+	
+// }
 
 func printDuplicatesSortedByLenght(len5 *map[int64]*map[[md5.Size]byte]filesStats) {
 	// print the duplicates sorted by length
