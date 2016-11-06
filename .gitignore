@@ -25,6 +25,7 @@ _testmain.go
 *.prof
 *.cache
 deldup
+deldupcmd
 deldup.cache
 webif
 zzz

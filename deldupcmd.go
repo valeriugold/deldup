@@ -2,14 +2,15 @@
 package main
 
 import (
-	"github.com/valeriugold/deldup/deldup"
+	"github.com/valeriugold/deldup/dupfinder"
 	"flag"
-
+	"os"
 	"fmt"
 	"strings"
-	// "text/tabwriter"
+	"path/filepath"
+	"text/tabwriter"
 	//"text/template"
-	"html/template"
+	// "html/template"
 )
 
 var cmdLineDirsIn = flag.String("dirs", ".", "search for duplicates in these dirs")
@@ -40,29 +41,32 @@ func main() {
 	}
 	cacheFileName := dirCurrent + "/deldup.cache"
 
-	dups := GetDups(&roots, &exclude, cacheFileName)
+	dups := dupfinder.GetDups(&roots, &exclude, cacheFileName)
 
 	fmt.Println("\n\nUnsorted\n\n")
 	printDuplicates(&dups)
 	
 	fmt.Println("\n\nSortBySize\n\n")
-	dups.SortCustom(SortBySize)
+	dups.SortCustom(dupfinder.SortBySize)
 	printDuplicates(&dups)
 	fmt.Println("\n\nSortByName\n\n")
-	dups.SortCustom(SortByName)
+	dups.SortCustom(dupfinder.SortByName)
 	printDuplicates(&dups)
 	fmt.Println("\n\nSortBySiblingsCount\n\n")
-	dups.SortCustom(SortBySiblingsCount)
+	dups.SortCustom(dupfinder.SortBySiblingsCount)
 	printDuplicates(&dups)
 
 	// printDirFilesTabbed(tbl)
 	// printDirFilesHtmlTable(tbl)
-	out := GetHtmlTableFromGroups(&dups)
-	fmt.Printf("%s\n", out)
+	// out := GetHtmlTableFromGroups(&dups)
 }
 
-func printDuplicates(dups *Groups) {
+
+func printDuplicates(dups *dupfinder.Groups) {
 	fmt.Println("here are duplicates")
+	// print tabbed
+	printDirFilesTabbed(dups)
+	return
 	for _, fg := range *dups {
 		if len(fg) == 0 || fg[0].Stats.Size() == 0 {
 			continue
@@ -74,21 +78,18 @@ func printDuplicates(dups *Groups) {
 	}
 }
 
-
-// type DirFiles struct {
-// 	Dir	string
-// 	Dups	[]filesStats
-// }
-// func printDirFilesTabbed(tbl []DirFiles) {
-// 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, '.', 0)
-// 	for _, df := range tbl {
-// 		fmt.Fprintf(w, "dir=%s rows=%d \t same\n", df.Dir, len(df.Dups))
-// 		for _, row := range df.Dups {
-// 			for _, f := range row {
-// 				fmt.Fprintf(w, "  %s\t", f.FullName)
-// 			}
-// 			fmt.Fprintf(w, "\n")
-// 		}
-// 	}
-// 	w.Flush()
-// }
+func printDirFilesTabbed(dups *dupfinder.Groups) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	for _, fg := range *dups {
+		if len(fg) == 0 || fg[0].Stats.Size() == 0 {
+			continue
+		}
+		// fmt.Fprintf(w, "dir=%s size=%d rows=%d \t \n", filepath.Dir(fg[0].FullName), fg[0].Stats.Size(), len(fg))
+		fmt.Fprintf(w, "%9d \t", fg[0].Stats.Size())
+		for _, f := range fg {
+			fmt.Fprintf(w, "%s\t", f.FullName)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+	w.Flush()
+}

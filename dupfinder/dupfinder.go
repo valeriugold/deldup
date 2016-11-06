@@ -1,5 +1,5 @@
 // Delete duplicates from given directory list
-package deldup
+package dupfinder
 
 import (
 	"bufio"
@@ -32,7 +32,6 @@ func (st *FileStats) String() string {
 
 // // list of FileStats pointers
 // type filesStats	[]*FileStats
-
 // // allow sort by FullName
 // type byFullName filesStats
 // func (x byFullName) Len() int           { return len(x) }
@@ -52,32 +51,6 @@ const (
 
 // use tokens to limit gofuncs
 var tokens = make(chan struct{}, 20)
-
-// func main() {
-// 	// get arguments
-// 	flag.Usage = func() {
-// 		fmt.Fprintf(os.Stderr, "Parse the given dir list and and print duplicates\n")
-// 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-// 		flag.PrintDefaults()
-// 	}
-// 	flag.Parse()
-// 	roots := strings.Split(*cmdLineDirsIn, ",")
-// 	if len(roots) == 0 {
-// 		roots = []string{"."}
-// 	}
-// 	exclude := make(map[string]bool)
-// 	for _, s := range strings.Split(*cmdLineDirsExclude, ",") {
-// 		exclude[s] = true
-// 	}
-
-// 	dirCurrent, err := filepath.Abs(filepath.Dir(os.Args[0]))
-// 	if err != nil {
-// 		// log.Fatal(err)
-// 		fmt.Fprintf(os.Stderr, "%v\n", err)
-// 		os.Exit(1)
-// 	}
-// 	cacheFileName := dirCurrent + "/deldup.cache"
-// }
 
 func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string) (Groups) {
 	
@@ -488,7 +461,7 @@ func (g *Groups) SortCustom(sortType int) {
 	for _, fg := range *g { fg.SortCustom(sortType) }
 	switch sortType {
 	case SortBySize:
-		sort.Sort(sortGroupByFileSize(*g))
+		sort.Sort(sort.Reverse(sortGroupByFileSize(*g)))
 	case SortByName:
 		sort.Sort(sortGroupByName(*g))
 	case SortBySiblingsCount:
