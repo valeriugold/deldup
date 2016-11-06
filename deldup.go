@@ -1,11 +1,10 @@
 // Delete duplicates from given directory list
-package main
+package deldup
 
 import (
 	"bufio"
 	"crypto/md5"
 	// "encoding/gob"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,81 +12,77 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
-	"text/tabwriter"
-	//"text/template"
-	"html/template"
 )
 
-var cmdLineDirsIn = flag.String("dirs", ".", "search for duplicates in these dirs")
-var cmdLineDirsExclude = flag.String("exclude", "", "omit seraching in these dirs")
 
-// file length type
-type flen []int64
-func (a flen) Len() int { return len(a) }
-func (a flen) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a flen) Less(i, j int) bool { return a[i] < a[j] }
-
-type filestats struct {
-	FullName    string
-	stats	    os.FileInfo
-	md5sum	    [md5.Size]byte
+type FileStats struct {
+	FullName	string
+	Stats		os.FileInfo
+	Md5sum		[md5.Size]byte
+	SiblingsCount	int	// no of duplicate files in the same directory
 }
 
-func (st *filestats) String() string {
+func (st *FileStats) String() string {
 	return fmt.Sprintf("fn:%s name:%s size:%d modtime:%s",
-		st.FullName, st.stats.Name(), st.stats.Size(),
-		st.stats.ModTime().Format("2006-01-02 15:04:05"))
+		st.FullName, st.Stats.Name(), st.Stats.Size(),
+		st.Stats.ModTime().Format("2006-01-02 15:04:05"))
 }
 
-type cachedMd5Sum struct {
-	md5sum	    [md5.Size]byte
-	FullName    string
-}
 
-// list of filestats pointers
-type filesStats	[]*filestats
+// // list of FileStats pointers
+// type filesStats	[]*FileStats
 
-// allow sort by FullName
-type byFullName filesStats
-func (x byFullName) Len() int           { return len(x) }
-func (x byFullName) Less(i, j int) bool { return x[i].FullName < x[j].FullName }
-func (x byFullName) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+// // allow sort by FullName
+// type byFullName filesStats
+// func (x byFullName) Len() int           { return len(x) }
+// func (x byFullName) Less(i, j int) bool { return x[i].FullName < x[j].FullName }
+// func (x byFullName) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
-type dirFiles struct {
-	Dir	string
-	Dups	[]filesStats
-}
 
+type FilesGroup	[]*FileStats
+type Groups	[]FilesGroup
+
+const (
+	SortBySize	    = iota
+	SortByName	    = iota
+	SortBySiblingsCount  = iota
+)
+
+
+// use tokens to limit gofuncs
 var tokens = make(chan struct{}, 20)
 
-func main() {
-	// get arguments
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Parse the given dir list and and print duplicates\n")
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-	roots := strings.Split(*cmdLineDirsIn, ",")
-	if len(roots) == 0 {
-		roots = []string{"."}
-	}
-	exclude := make(map[string]bool)
-	for _, s := range strings.Split(*cmdLineDirsExclude, ",") {
-		exclude[s] = true
-	}
+// func main() {
+// 	// get arguments
+// 	flag.Usage = func() {
+// 		fmt.Fprintf(os.Stderr, "Parse the given dir list and and print duplicates\n")
+// 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+// 		flag.PrintDefaults()
+// 	}
+// 	flag.Parse()
+// 	roots := strings.Split(*cmdLineDirsIn, ",")
+// 	if len(roots) == 0 {
+// 		roots = []string{"."}
+// 	}
+// 	exclude := make(map[string]bool)
+// 	for _, s := range strings.Split(*cmdLineDirsExclude, ",") {
+// 		exclude[s] = true
+// 	}
 
-	dirCurrent, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		// log.Fatal(err)
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-	cacheFileName := dirCurrent + "/deldup.cache"
+// 	dirCurrent, err := filepath.Abs(filepath.Dir(os.Args[0]))
+// 	if err != nil {
+// 		// log.Fatal(err)
+// 		fmt.Fprintf(os.Stderr, "%v\n", err)
+// 		os.Exit(1)
+// 	}
+// 	cacheFileName := dirCurrent + "/deldup.cache"
+// }
+
+func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string) (Groups) {
 	
-	lenToNames, lenDuplicates := parseDirStructure(&roots, &exclude)
+	// divide the files per their size
+	allFiles := parseDirStructure(roots, exclude)
 	
 	// // just for debug print lenToNames
 	// for _, v := range lenToNames {
@@ -97,59 +92,51 @@ func main() {
 	// 	}
 	// 	fmt.Printf("\n")
 	// }
-	fmt.Println("add md5sums")
-
-	// get md5sum for all potential duplicate files
-	fillMd5SumField(&lenToNames, &lenDuplicates, cacheFileName)
-
-	// construct a map of length, that on each value has a map of md5sums,
-	// that on each value has a slice of identical files
-	len5 := make(map[int64]*map[[md5.Size]byte]filesStats)	
-	for _, length := range lenDuplicates {
-		// returns a map only if contains duplicates
-		if m5 := getMapOfMd5Duplicates(lenToNames[length]); m5 != nil {
-			len5[length] = m5
-		}
-	}
-
-	printDuplicatesSortedByLenght(&len5)
-	tbl := getTblDuplicatesSortedByDir(&len5)
-	printDirFilesTabbed(tbl)
-	printDirFilesHtmlTable(tbl)
+	// fmt.Println("add md5sums")
+	fmt.Println("allFiles=%d", len(allFiles))
 	
-	// 	var sf []string
-	// 	for _, f := range lenToNames[length] {
-	// 		sf = append(sf, f.FullName)
-	// 	}
-	// 	var d string
-	// 	var sb []string
-	// 	if len(roots) < 2 {
-	// 		l := len(roots[0])
-	// 		if ! (roots[0][l-1:] == "/") {
-	// 			l++
-	// 		}
-	// 		d, sb = removeRootDir(l, sf)
-	// 	} else {
-	// 		d, sb = getCommonDir(sf)
-	// 	}
-	// 	fmt.Printf("dir: %s len %d : ", d, length)
-	// 	for _, f := range sb {
-	// 		fmt.Printf("%s, ", f)
-	// 	}
-	// 	// e := lenToNames[length][0]
-	// 	// fmt.Printf("dir: %s len %d : ",
-	// 	// 	e.FullName[:len(e.FullName) - len(e.stats.Name())],
-	// 	// 	length)
-	// 	// for _, f := range lenToNames[length] {
-	// 	// 	fmt.Printf(" %s", f.stats.Name())
-	// 	// }
-	// 	fmt.Printf("\n")
-	// }
+	// group files with same length
+	sizeGroup := groupFilesWithSameSize(&allFiles)
+	fmt.Println(len(sizeGroup))
+	
+	// get md5sum for all potential duplicate files
+	fillMd5SumField(&sizeGroup, cacheFileName)
+	fmt.Println(len(sizeGroup))
+	
+	// get Groups of slices with same duplicate files
+	var dups Groups
+	for _, fg := range sizeGroup {
+		addDuplicateGroups(fg, &dups)
+	}
+	fmt.Println(len(dups))
+	
+	fillSiblingsCount(&dups)
+
+	return dups
+	// fmt.Println("\n\nUnsorted\n\n")
+	// printDuplicates(&dups)
+	
+	// fmt.Println("\n\nSortBySize\n\n")
+	// dups.SortCustom(SortBySize)
+	// printDuplicates(&dups)
+	// fmt.Println("\n\nSortByName\n\n")
+	// dups.SortCustom(SortByName)
+	// printDuplicates(&dups)
+	// fmt.Println("\n\nSortBySiblingsCount\n\n")
+	// dups.SortCustom(SortBySiblingsCount)
+	// printDuplicates(&dups)
+
+	// // printDirFilesTabbed(tbl)
+	// // printDirFilesHtmlTable(tbl)
+	// out := GetHtmlTableFromGroups(&dups)
+	// fmt.Printf("%s\n", out)
 }
 
+
+
 // parse dir structure
-func parseDirStructure(roots *([]string), exclude *(map[string]bool)) (map[int64]filesStats, flen)  {
-	reportFiles := make(chan *filestats)
+func parseDirStructure(roots *([]string), exclude *(map[string]bool)) (FilesGroup)  {
+	reportFiles := make(chan *FileStats)
 	var n sync.WaitGroup
 	for _, dir := range *roots {
 		n.Add(1)
@@ -159,21 +146,17 @@ func parseDirStructure(roots *([]string), exclude *(map[string]bool)) (map[int64
 		n.Wait()
 		close(reportFiles)
 	}()
-	lenToNames := make(map[int64]filesStats)
-	lenDuplicates := make(flen, 256, 256)
+	var fg FilesGroup
 	for fs := range reportFiles {
-		if fs.stats.IsDir() || fs.stats.Name() == ".DS_Store" {
+		if fs.Stats.IsDir() || fs.Stats.Name() == ".DS_Store" {
 			continue
 		}
-		if _, ok := lenToNames[fs.stats.Size()]; ok {
-			lenDuplicates = append(lenDuplicates, fs.stats.Size())
-		}
-		lenToNames[fs.stats.Size()] = append(lenToNames[fs.stats.Size()], fs)
+		fg = append(fg, fs)
 	}
-	return lenToNames, lenDuplicates
+	return fg
 }
 
-func addDir(dir string, n *sync.WaitGroup, reportFiles chan<- *filestats, exclude *map[string]bool) {
+func addDir(dir string, n *sync.WaitGroup, reportFiles chan<- *FileStats, exclude *map[string]bool) {
 	defer n.Done()
 	tokens <- struct{}{}
 	defer func() { <- tokens }()
@@ -191,14 +174,52 @@ func addDir(dir string, n *sync.WaitGroup, reportFiles chan<- *filestats, exclud
 			n.Add(1)
 			go addDir(FullName, n, reportFiles, exclude)
 		}
-		reportFiles <- &filestats{FullName, entry, [md5.Size]byte{}}
+		reportFiles <- &FileStats{FullName, entry, [md5.Size]byte{}, 0}
 	}
+}
+
+type bySize FilesGroup
+func (x bySize) Len() int           { return len(x) }
+func (x bySize) Less(i, j int) bool { return x[i].Stats.Size() < x[j].Stats.Size() }
+func (x bySize) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+
+func groupFilesWithSameSize(all *FilesGroup) (Groups) {
+	var g Groups
+	if len(*all) == 0 {
+		return g
+	}
+	sort.Sort(bySize(*all))
+	var fg FilesGroup
+	for i := 1; i < (len(*all)); i++ {
+		if (*all)[i - 1].Stats.Size() == (*all)[i].Stats.Size()  {
+			if len(fg) == 0 {
+				fg = append(fg, (*all)[i - 1])
+			}
+			fg = append(fg, (*all)[i])
+		} else {
+			if len(fg) > 1 {
+				tmp := make(FilesGroup, len(fg))
+				copy(tmp, fg)
+				g = append(g, tmp)
+				fg = fg[:0]
+			}
+		}
+	}
+	if len(fg) > 1 {
+		g = append(g, fg)
+	}
+	return g
 }
 
 // get md5sum for all potential duplicate files
 // modify lenToNames
-func fillMd5SumField(lenToNames *(map[int64]filesStats), lenDuplicates *flen, cacheFileName string) {
-	// load known md4sum values from cache
+func fillMd5SumField(g *Groups, cacheFileName string) {
+	type cachedMd5Sum struct {
+		md5sum	    [md5.Size]byte
+		fullName    string
+	}
+
+	// load known md5sum values from cache
 	map5 := func(path string) (map[string][md5.Size]byte) {
 		map5 := make(map[string][md5.Size]byte)
 		f, err := os.Open(path)
@@ -231,75 +252,54 @@ func fillMd5SumField(lenToNames *(map[int64]filesStats), lenDuplicates *flen, ca
 		}
 		defer file.Close()
 		for x := range chSave {
-			s := fmt.Sprintf("%x, %s\n", x.md5sum, x.FullName)
+			s := fmt.Sprintf("%x, %s\n", x.md5sum, x.fullName)
 			file.Write([]byte(s))
 			file.Sync()
 		}
 	}(cacheFileName, chSaveMd5Sums)
 	
 	var n2 sync.WaitGroup
-	// loop only for lenghts that feet multiple files, possible duplicates
-	for _, length := range *lenDuplicates {
-		if length == 0 {
+	// loop only for lenghts that fit multiple files, possible duplicates
+	for _, fg := range *g {
+		if len(fg) == 0 || fg[0].Stats.Size() == 0 {
 			continue
 		}
-		for _, f := range (*lenToNames)[length] {
+		for _, f := range fg {
 			if n, ok := map5[f.FullName]; ok {
 				// fmt.Printf("_load md5 form cache %s\n", f.FullName)
-				f.md5sum = n
-			// } else if !f.stats.IsDir() && f.stats.Name() != ".DS_Store" {
+				f.Md5sum = n
+			// } else if !f.Stats.IsDir() && f.Stats.Name() != ".DS_Store" {
 			} else {
 				n2.Add(1)
-				go func(fs *filestats) {
+				go func(fs *FileStats) {
 					defer n2.Done()
 					tokens <- struct{}{}
 					defer func() { <- tokens }()
-					fs.md5sum, _ = getMd5FromFile(fs.FullName)
-					chSaveMd5Sums <- cachedMd5Sum{fs.md5sum, fs.FullName}
+					fs.Md5sum, _ = getMd5FromFile(fs.FullName)
+					chSaveMd5Sums <- cachedMd5Sum{fs.Md5sum, fs.FullName}
 				}(f)
 			}
 		}
 	}
 	n2.Wait()
 	close(chSaveMd5Sums)
-	
-	// // add all known md5sums to map5
-	// for _, length := range *lenDuplicates {
-	// 	for _, f := range (*lenToNames)[length] {
-	// 		map5[f.FullName] = f.md5sum
-	// 	}
-	// }
 	return
 }
 
 // return map of [md5sum] -> filesStats
-func getMapOfMd5Duplicates(files filesStats) (*map[[md5.Size]byte]filesStats) {
-	m5 := make(map[[md5.Size]byte]filesStats)
+func addDuplicateGroups(files FilesGroup, dups *Groups) {
+	m5 := make(map[[md5.Size]byte]FilesGroup)
 	for _, f := range files {
-		m5[f.md5sum] = append(m5[f.md5sum], f)
+		m5[f.Md5sum] = append(m5[f.Md5sum], f)
 	}
 	// remove md5sums and files that don't have duplicates in m5
-	for k, v := range m5 {
-		if len(v) <= 1 {
-			// this file is not duplicate
-			delete(m5, k)
+	for _, v := range m5 {
+		if len(v) > 1 {
+			*dups = append(*dups, v)
 		}
 	}
-	if len(m5) > 0 {
-		return &m5
-	}
-	return nil
 }
 
-
-func removeRootDir(l int, sf []string) (d string, sb []string) {
-	for _, s := range sf {
-		sb = append(sb, s[l:])
-		// fmt.Printf("%s ,", s[l:])
-	}
-	// fmt.Printf("\n22222 i=%d, j=%d, d=%s, from %v\n", i, j, d, sf)
-	return
-}
 func getCommonDir(sf []string) (d string, sb []string) {
 	var i int = 0
 Out:
@@ -317,20 +317,17 @@ Out:
 	}
 	var j int
 
-	// fmt.Printf("00000 i=%d, j=%d, d=%s, from %v\n", i, j, d, sf)
 	for j = i - 1; j >= 0; j-- {
 		if sf[0][j] == '/' {
 			break
 		}
 	}
 	j++
-	// fmt.Printf("11111 i=%d, j=%d, d=%s, return: ", i, j, d)
 	d = sf[0][:j]
 	for _, s := range sf {
 		sb = append(sb, s[j:])
 		// fmt.Printf("%s ,", s[j:])
 	}
-	// fmt.Printf("\n22222 i=%d, j=%d, d=%s, from %v\n", i, j, d, sf)
 	return
 }
 
@@ -360,155 +357,145 @@ func getMd5FromFile(s string) ([md5.Size]byte, error) {
 	// return hash.Sum(nil)[:md5.Size], nil
 }
 
-type dirpri struct {
-	dir	string
-	pri	int
-}
-type sldirpritype []dirpri
-func (a sldirpritype) Len() int { return len(a) }
-func (a sldirpritype) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a sldirpritype) Less(i, j int) bool { return a[i].pri < a[j].pri }
-
-func getTblDuplicatesSortedByDir(len5 *map[int64]*map[[md5.Size]byte]filesStats) ([]dirFiles) {
-	// map with keys dir and values slices of filestats from that dir
-	dirs := make(map[string]filesStats)
-	var slDirPri sldirpritype
-	// var sliceDirs []string
-	for _, mapM5 := range *len5 {
-		for _, sliceFs := range *mapM5 {
-			for _, f := range sliceFs {
-				d := filepath.Dir(f.FullName)
-				if _, ok := dirs[d]; !ok {
-					slDirPri = append(slDirPri, dirpri{d, 0})
-					// sliceDirs := append(sliceDirs, d)
-				}
-				dirs[d] = append(dirs[d], f)
-				fmt.Printf("for d=%s, now there are %d\n", d, len(dirs))
-			}
-		}
-	}
-	for i, sf := range slDirPri {
-		// sf.pri = len(dirs[sf.dir])
-		slDirPri[i].pri = len(dirs[sf.dir])
-	}
-	// // print dirs for debug
-	// for _, sf := range slDirPri {
-	// 	fmt.Printf("xxxx---- for %d, pri=%d\n", sf.dir, sf.pri)
-	// }
-	sort.Sort(sort.Reverse(slDirPri))
-	// fmt.Println(slDirPri)
-
-	var tbl []dirFiles
-	doneFile := make(map[string]bool)
-	for _, sf := range slDirPri {
-		var df dirFiles
-		df.Dir = sf.dir
-		slFs := dirs[sf.dir]
-		// fmt.Fprintf(w, "dir=%s pri=%d \t same \t\n", sf.dir, sf.pri)
-		headerDir := fmt.Sprintf("dir=%s pri=%d \t same \t\n", sf.dir, sf.pri)
-		sort.Sort(byFullName(slFs))
-		for _, fs := range slFs {
-			if _, ok := doneFile[fs.FullName]; ok {
-				continue
-			}
-			if len(headerDir) > 0  {
-				//x//fmt.Fprintf(w, "%s", headerDir)
-				headerDir = ""
-			}
-			var row filesStats
-			row = append(row, fs)
-			// print the initial file
-			doneFile[fs.FullName] = true
-			//x//fmt.Fprintf(w, "  %s\t", fs.FullName)
-			slSameMd5 := (*(*len5)[fs.stats.Size()])[fs.md5sum]
-			for _, f := range slSameMd5 {
-				if _, ok := doneFile[f.FullName]; !ok {
-					doneFile[f.FullName] = true
-					row = append(row, fs)
-					//x//fmt.Fprintf(w, "  %s\t", f.FullName)
-				}
-			}
-			df.Dups = append(df.Dups, row)
-			//x//fmt.Fprintf(w, "\n")
-		}
-		if len(df.Dups) > 0 {
-			tbl = append(tbl, df)
-		}
-	}
-	return tbl
-}
-
-func printDirFilesTabbed(tbl []dirFiles) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, '.', 0)
-	for _, df := range tbl {
-		fmt.Fprintf(w, "dir=%s rows=%d \t same\n", df.Dir, len(df.Dups))
-		for _, row := range df.Dups {
-			for _, f := range row {
-				fmt.Fprintf(w, "  %s\t", f.FullName)
-			}
-			fmt.Fprintf(w, "\n")
-		}
-	}
-	w.Flush()
-}
-type PrintFile struct {
-	FullName    string
-	Length	    int64
-}
-
-func printDirFilesHtmlTable(tbl []dirFiles) {
-	funcMap := template.FuncMap{
-		"length": func(x []filesStats) int { return len(x) },
-	}
-	const ctfn = `{{range .}}dir={{.Dir}}     x     rows={{length .Dups}}
-{{range .Dups}} ### {{range .}}FulName={{.FullName}}, next is {{end}} !!!
-{{end}}{{end}}`
-	t := template.Must(template.New("dupfiles").Funcs(funcMap).Parse(ctfn))
-	fmt.Println("templatesssssssssssssssssssssssssssss:")
-	err := t.Execute(os.Stdout, tbl)
-	if err != nil {
-		fmt.Println("executing template:", err)
-		os.Exit(1)
-	}
-
-	const cht = `<table>{{range .}}<tr><td>dir={{.Dir}}     </td><td>     rows={{length .Dups}}</td></tr>
-{{range .Dups}}<tr>{{range .}}
-  <td>{{.FullName}} </td> {{end}}
-</tr>
-{{end}}{{end}}</table>
-`
-	th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(cht))
-	fmt.Println("templatesssssssssssssssssssssssssssss htttttttmmmmmmmmmllllllllllllllllllll:")
-	err2 := th.Execute(os.Stdout, tbl)
-	if err2 != nil {
-		fmt.Println("executing template:", err2)
-		os.Exit(1)
-	}
-}
-
-func printDuplicatesSortedByLenght(len5 *map[int64]*map[[md5.Size]byte]filesStats) {
-	// print the duplicates sorted by length
-	// dupSlice has all the lenghts of files that have duplicates
-	dupSlice := make(flen, len(*len5), len(*len5))
-	for length := range *len5 {
-		dupSlice = append(dupSlice, length)
-	}
-	sort.Sort(sort.Reverse(dupSlice))
-	
-	fmt.Println("here are duplicates")
-	for _, length := range dupSlice {
-		if length == 0 {
+func fillSiblingsCount(dups *Groups) {
+	dirs := make(map[string]int)
+	// calculate SiblingsCount per dir
+	for _, fg := range *dups {
+		if len(fg) == 0 || fg[0].Stats.Size() == 0 {
 			continue
 		}
-		fmt.Printf("length %d:\n", length)
-		for k, v := range *((*len5)[length]) {
-			fmt.Printf("    sum:%v\n", k)
-			for _, fs := range v {
-				fmt.Printf("        %s\n", fs.FullName)
-			}
+		for _, f := range fg {
+			d := filepath.Dir(f.FullName)
+			dirs[d]++
+		}
+	}
+	// update files with their directories SiblingsCount
+	for _, fg := range *dups {
+		if len(fg) == 0 || fg[0].Stats.Size() == 0 {
+			continue
+		}
+		for _, f := range fg {
+			d := filepath.Dir(f.FullName)
+			f.SiblingsCount = dirs[d]
 		}
 	}
 }
+
+// func GetHtmlTableFromGroups(g *Groups) {
+// 	var out []byte
+// 	funcMap := template.FuncMap{
+// 		"length": func(x FilesGroup) int { return len(x) },
+// 		"dir": func(x FilesGroup) string { return filepath.Dir(x[0].FullName) },
+// 	}
+// // 	const ctfn = `{{range .}}dir={{dir .}}     x     rows={{length .}}
+// // {{range .}} ### FulName={{.FullName}}, next is !!!
+// // {{end}}{{end}}`
+// // 	t := template.Must(template.New("dupfiles").Funcs(funcMap).Parse(ctfn))
+// // 	fmt.Println("templatesssssssssssssssssssssssssssss:")
+// // 	err := t.Execute(os.Stdout, g)
+// // 	if err != nil {
+// // 		fmt.Println("executing template:", err)
+// // 		os.Exit(1)
+// // 	}
+
+// 	const cht = `<table border=3>{{range .}}<tr><td>dir={{dir .}}     </td><td>     rows={{length .}}</td></tr>
+// <tr>{{range .}}<td>{{.FullName}} </td>{{end}}</tr>
+// {{end}}</table>
+// `
+// 	th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(cht))
+// 	fmt.Println("templatesssssssssssssssssssssssssssss htttttttmmmmmmmmmllllllllllllllllllll:")
+// 	// err2 := th.Execute(os.Stdout, g)
+// 	err2 := th.Execute(os.Stdout, g)
+// 	if err2 != nil {
+// 		fmt.Println("executing template:", err2)
+// 		os.Exit(1)
+// 	}
+// }
+
+
+// func printDirFilesHtmlTable(tbl []DirFiles) {
+// 	funcMap := template.FuncMap{
+// 		"length": func(x []filesStats) int { return len(x) },
+// 	}
+// 	const ctfn = `{{range .}}dir={{.Dir}}     x     rows={{length .Dups}}
+// {{range .Dups}} ### {{range .}}FulName={{.FullName}}, next is {{end}} !!!
+// {{end}}{{end}}`
+// 	t := template.Must(template.New("dupfiles").Funcs(funcMap).Parse(ctfn))
+// 	fmt.Println("templatesssssssssssssssssssssssssssss:")
+// 	err := t.Execute(os.Stdout, tbl)
+// 	if err != nil {
+// 		fmt.Println("executing template:", err)
+// 		os.Exit(1)
+// 	}
+// 
+// 	const cht = `<table>{{range .}}<tr><td>dir={{.Dir}}     </td><td>     rows={{length .Dups}}</td></tr>
+// {{range .Dups}}<tr>{{range .}}
+//   <td>{{.FullName}} </td> {{end}}
+// </tr>
+// {{end}}{{end}}</table>
+// `
+// 	th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(cht))
+// 	fmt.Println("templatesssssssssssssssssssssssssssss htttttttmmmmmmmmmllllllllllllllllllll:")
+// 	err2 := th.Execute(os.Stdout, tbl)
+// 	if err2 != nil {
+// 		fmt.Println("executing template:", err2)
+// 		os.Exit(1)
+// 	}
+// }
+
+// file length type
+type flen []int64
+func (a flen) Len() int { return len(a) }
+func (a flen) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a flen) Less(i, j int) bool { return a[i] < a[j] }
+
+type sortFilesGroupByName FilesGroup
+func (a sortFilesGroupByName) Len() int { return len(a) }
+func (a sortFilesGroupByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortFilesGroupByName) Less(i, j int) bool { return a[i].FullName < a[j].FullName }
+
+type sortFilesGroupBySiblingsGroup FilesGroup
+func (a sortFilesGroupBySiblingsGroup) Len() int { return len(a) }
+func (a sortFilesGroupBySiblingsGroup) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortFilesGroupBySiblingsGroup) Less(i, j int) bool { return a[i].Stats.Size() < a[j].Stats.Size() }
+
+type sortGroupByFileSize Groups
+func (a sortGroupByFileSize) Len() int { return len(a) }
+func (a sortGroupByFileSize) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortGroupByFileSize) Less(i, j int) bool { return a[i][0].Stats.Size() < a[j][0].Stats.Size() }
+
+type sortGroupByName Groups
+func (a sortGroupByName) Len() int { return len(a) }
+func (a sortGroupByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortGroupByName) Less(i, j int) bool { return a[i][0].FullName < a[j][0].FullName }
+
+type sortGroupBySiblingsCount Groups
+func (a sortGroupBySiblingsCount) Len() int { return len(a) }
+func (a sortGroupBySiblingsCount) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortGroupBySiblingsCount) Less(i, j int) bool { return a[i][0].SiblingsCount < a[j][0].SiblingsCount }
+
+func (fg *FilesGroup) SortCustom(sortType int) {
+	switch sortType {
+	case SortBySize:
+		// sort.Sort(sort.Reverse(sortGroupByFileSize(*fg)))
+	case SortByName:
+		sort.Sort(sortFilesGroupByName(*fg))
+	case SortBySiblingsCount:
+		sort.Sort(sort.Reverse(sortFilesGroupBySiblingsGroup(*fg)))
+	}
+}
+func (g *Groups) SortCustom(sortType int) {
+	for _, fg := range *g { fg.SortCustom(sortType) }
+	switch sortType {
+	case SortBySize:
+		sort.Sort(sortGroupByFileSize(*g))
+	case SortByName:
+		sort.Sort(sortGroupByName(*g))
+	case SortBySiblingsCount:
+		sort.Sort(sort.Reverse(sortGroupBySiblingsCount(*g)))
+	}
+}
+
 
 // // Encode via Gob to file
 // func Save(path string, object interface{}) error {
