@@ -24,8 +24,12 @@ _testmain.go
 *.test
 *.prof
 *.cache
+.DS_Store
+cmdline
 deldup
 deldupcmd
 deldup.cache
 webif
+webver
+webver-start.sh
 zzz

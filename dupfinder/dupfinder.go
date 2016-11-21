@@ -15,12 +15,11 @@ import (
 	"sync"
 )
 
-
 type FileStats struct {
-	FullName	string
-	Stats		os.FileInfo
-	Md5sum		[md5.Size]byte
-	SiblingsCount	int	// no of duplicate files in the same directory
+	FullName      string
+	Stats         os.FileInfo
+	Md5sum        [md5.Size]byte
+	SiblingsCount int // no of duplicate files in the same directory
 }
 
 func (st *FileStats) String() string {
@@ -28,7 +27,6 @@ func (st *FileStats) String() string {
 		st.FullName, st.Stats.Name(), st.Stats.Size(),
 		st.Stats.ModTime().Format("2006-01-02 15:04:05"))
 }
-
 
 // // list of FileStats pointers
 // type filesStats	[]*FileStats
@@ -38,25 +36,23 @@ func (st *FileStats) String() string {
 // func (x byFullName) Less(i, j int) bool { return x[i].FullName < x[j].FullName }
 // func (x byFullName) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
-
-type FilesGroup	[]*FileStats
-type Groups	[]FilesGroup
+type FilesGroup []*FileStats
+type Groups []FilesGroup
 
 const (
-	SortBySize	    = iota
-	SortByName	    = iota
-	SortBySiblingsCount  = iota
+	SortBySize          = iota
+	SortByName          = iota
+	SortBySiblingsCount = iota
 )
-
 
 // use tokens to limit gofuncs
 var tokens = make(chan struct{}, 20)
 
-func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string) (Groups) {
-	
+func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string) Groups {
+
 	// divide the files per their size
 	allFiles := parseDirStructure(roots, exclude)
-	
+
 	// // just for debug print lenToNames
 	// for _, v := range lenToNames {
 	// 	fmt.Printf("elements: ")
@@ -67,28 +63,28 @@ func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string
 	// }
 	// fmt.Println("add md5sums")
 	fmt.Println("allFiles=%d", len(allFiles))
-	
+
 	// group files with same length
 	sizeGroup := groupFilesWithSameSize(&allFiles)
 	fmt.Println(len(sizeGroup))
-	
+
 	// get md5sum for all potential duplicate files
 	fillMd5SumField(&sizeGroup, cacheFileName)
 	fmt.Println(len(sizeGroup))
-	
+
 	// get Groups of slices with same duplicate files
 	var dups Groups
 	for _, fg := range sizeGroup {
 		addDuplicateGroups(fg, &dups)
 	}
 	fmt.Println(len(dups))
-	
+
 	fillSiblingsCount(&dups)
 
 	return dups
 	// fmt.Println("\n\nUnsorted\n\n")
 	// printDuplicates(&dups)
-	
+
 	// fmt.Println("\n\nSortBySize\n\n")
 	// dups.SortCustom(SortBySize)
 	// printDuplicates(&dups)
@@ -105,10 +101,8 @@ func GetDups(roots *([]string), exclude *(map[string]bool), cacheFileName string
 	// fmt.Printf("%s\n", out)
 }
 
-
-
 // parse dir structure
-func parseDirStructure(roots *([]string), exclude *(map[string]bool)) (FilesGroup)  {
+func parseDirStructure(roots *([]string), exclude *(map[string]bool)) FilesGroup {
 	reportFiles := make(chan *FileStats)
 	var n sync.WaitGroup
 	for _, dir := range *roots {
@@ -132,7 +126,7 @@ func parseDirStructure(roots *([]string), exclude *(map[string]bool)) (FilesGrou
 func addDir(dir string, n *sync.WaitGroup, reportFiles chan<- *FileStats, exclude *map[string]bool) {
 	defer n.Done()
 	tokens <- struct{}{}
-	defer func() { <- tokens }()
+	defer func() { <-tokens }()
 	if _, ok := (*exclude)[dir]; ok {
 		return
 	}
@@ -152,11 +146,12 @@ func addDir(dir string, n *sync.WaitGroup, reportFiles chan<- *FileStats, exclud
 }
 
 type bySize FilesGroup
+
 func (x bySize) Len() int           { return len(x) }
 func (x bySize) Less(i, j int) bool { return x[i].Stats.Size() < x[j].Stats.Size() }
 func (x bySize) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
-func groupFilesWithSameSize(all *FilesGroup) (Groups) {
+func groupFilesWithSameSize(all *FilesGroup) Groups {
 	var g Groups
 	if len(*all) == 0 {
 		return g
@@ -164,9 +159,9 @@ func groupFilesWithSameSize(all *FilesGroup) (Groups) {
 	sort.Sort(bySize(*all))
 	var fg FilesGroup
 	for i := 1; i < (len(*all)); i++ {
-		if (*all)[i - 1].Stats.Size() == (*all)[i].Stats.Size()  {
+		if (*all)[i-1].Stats.Size() == (*all)[i].Stats.Size() {
 			if len(fg) == 0 {
-				fg = append(fg, (*all)[i - 1])
+				fg = append(fg, (*all)[i-1])
 			}
 			fg = append(fg, (*all)[i])
 		} else {
@@ -188,12 +183,12 @@ func groupFilesWithSameSize(all *FilesGroup) (Groups) {
 // modify lenToNames
 func fillMd5SumField(g *Groups, cacheFileName string) {
 	type cachedMd5Sum struct {
-		md5sum	    [md5.Size]byte
-		fullName    string
+		md5sum   [md5.Size]byte
+		fullName string
 	}
 
 	// load known md5sum values from cache
-	map5 := func(path string) (map[string][md5.Size]byte) {
+	map5 := func(path string) map[string][md5.Size]byte {
 		map5 := make(map[string][md5.Size]byte)
 		f, err := os.Open(path)
 		if err != nil {
@@ -207,7 +202,7 @@ func fillMd5SumField(g *Groups, cacheFileName string) {
 			s := make([]byte, md5.Size, md5.Size)
 			fmt.Sscanf(input.Text(), "%x, %s", &s, &name)
 			var sum [md5.Size]byte
-			copy(sum[:],s)
+			copy(sum[:], s)
 			// fmt.Printf("inpt=%s, s=%x, sum=%x, name=%s\n", input.Text(), s, sum, name)
 			map5[name] = sum
 		}
@@ -230,7 +225,7 @@ func fillMd5SumField(g *Groups, cacheFileName string) {
 			file.Sync()
 		}
 	}(cacheFileName, chSaveMd5Sums)
-	
+
 	var n2 sync.WaitGroup
 	// loop only for lenghts that fit multiple files, possible duplicates
 	for _, fg := range *g {
@@ -241,13 +236,13 @@ func fillMd5SumField(g *Groups, cacheFileName string) {
 			if n, ok := map5[f.FullName]; ok {
 				// fmt.Printf("_load md5 form cache %s\n", f.FullName)
 				f.Md5sum = n
-			// } else if !f.Stats.IsDir() && f.Stats.Name() != ".DS_Store" {
+				// } else if !f.Stats.IsDir() && f.Stats.Name() != ".DS_Store" {
 			} else {
 				n2.Add(1)
 				go func(fs *FileStats) {
 					defer n2.Done()
 					tokens <- struct{}{}
-					defer func() { <- tokens }()
+					defer func() { <-tokens }()
 					fs.Md5sum, _ = getMd5FromFile(fs.FullName)
 					chSaveMd5Sums <- cachedMd5Sum{fs.Md5sum, fs.FullName}
 				}(f)
@@ -385,7 +380,6 @@ func fillSiblingsCount(dups *Groups) {
 // 	}
 // }
 
-
 // func printDirFilesHtmlTable(tbl []DirFiles) {
 // 	funcMap := template.FuncMap{
 // 		"length": func(x []filesStats) int { return len(x) },
@@ -400,7 +394,7 @@ func fillSiblingsCount(dups *Groups) {
 // 		fmt.Println("executing template:", err)
 // 		os.Exit(1)
 // 	}
-// 
+//
 // 	const cht = `<table>{{range .}}<tr><td>dir={{.Dir}}     </td><td>     rows={{length .Dups}}</td></tr>
 // {{range .Dups}}<tr>{{range .}}
 //   <td>{{.FullName}} </td> {{end}}
@@ -418,34 +412,44 @@ func fillSiblingsCount(dups *Groups) {
 
 // file length type
 type flen []int64
-func (a flen) Len() int { return len(a) }
-func (a flen) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+func (a flen) Len() int           { return len(a) }
+func (a flen) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a flen) Less(i, j int) bool { return a[i] < a[j] }
 
 type sortFilesGroupByName FilesGroup
-func (a sortFilesGroupByName) Len() int { return len(a) }
-func (a sortFilesGroupByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+func (a sortFilesGroupByName) Len() int           { return len(a) }
+func (a sortFilesGroupByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a sortFilesGroupByName) Less(i, j int) bool { return a[i].FullName < a[j].FullName }
 
 type sortFilesGroupBySiblingsGroup FilesGroup
-func (a sortFilesGroupBySiblingsGroup) Len() int { return len(a) }
+
+func (a sortFilesGroupBySiblingsGroup) Len() int      { return len(a) }
 func (a sortFilesGroupBySiblingsGroup) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a sortFilesGroupBySiblingsGroup) Less(i, j int) bool { return a[i].Stats.Size() < a[j].Stats.Size() }
+func (a sortFilesGroupBySiblingsGroup) Less(i, j int) bool {
+	return a[i].SiblingsCount < a[j].SiblingsCount
+}
 
 type sortGroupByFileSize Groups
-func (a sortGroupByFileSize) Len() int { return len(a) }
-func (a sortGroupByFileSize) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+func (a sortGroupByFileSize) Len() int           { return len(a) }
+func (a sortGroupByFileSize) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a sortGroupByFileSize) Less(i, j int) bool { return a[i][0].Stats.Size() < a[j][0].Stats.Size() }
 
 type sortGroupByName Groups
-func (a sortGroupByName) Len() int { return len(a) }
-func (a sortGroupByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+func (a sortGroupByName) Len() int           { return len(a) }
+func (a sortGroupByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a sortGroupByName) Less(i, j int) bool { return a[i][0].FullName < a[j][0].FullName }
 
 type sortGroupBySiblingsCount Groups
-func (a sortGroupBySiblingsCount) Len() int { return len(a) }
+
+func (a sortGroupBySiblingsCount) Len() int      { return len(a) }
 func (a sortGroupBySiblingsCount) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a sortGroupBySiblingsCount) Less(i, j int) bool { return a[i][0].SiblingsCount < a[j][0].SiblingsCount }
+func (a sortGroupBySiblingsCount) Less(i, j int) bool {
+	return a[i][0].SiblingsCount < a[j][0].SiblingsCount
+}
 
 func (fg *FilesGroup) SortCustom(sortType int) {
 	switch sortType {
@@ -458,7 +462,9 @@ func (fg *FilesGroup) SortCustom(sortType int) {
 	}
 }
 func (g *Groups) SortCustom(sortType int) {
-	for _, fg := range *g { fg.SortCustom(sortType) }
+	for _, fg := range *g {
+		fg.SortCustom(sortType)
+	}
 	switch sortType {
 	case SortBySize:
 		sort.Sort(sort.Reverse(sortGroupByFileSize(*g)))
@@ -468,7 +474,6 @@ func (g *Groups) SortCustom(sortType int) {
 		sort.Sort(sort.Reverse(sortGroupBySiblingsCount(*g)))
 	}
 }
-
 
 // // Encode via Gob to file
 // func Save(path string, object interface{}) error {

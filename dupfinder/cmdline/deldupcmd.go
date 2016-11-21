@@ -2,13 +2,14 @@
 package main
 
 import (
-	"github.com/valeriugold/deldup/dupfinder"
 	"flag"
-	"os"
 	"fmt"
-	"strings"
+	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
+
+	"github.com/valeriugold/deldup/dupfinder"
 	//"text/template"
 	// "html/template"
 )
@@ -45,7 +46,7 @@ func main() {
 
 	fmt.Println("\n\nUnsorted\n\n")
 	printDuplicates(&dups)
-	
+
 	fmt.Println("\n\nSortBySize\n\n")
 	dups.SortCustom(dupfinder.SortBySize)
 	printDuplicates(&dups)
@@ -61,7 +62,6 @@ func main() {
 	// out := GetHtmlTableFromGroups(&dups)
 }
 
-
 func printDuplicates(dups *dupfinder.Groups) {
 	fmt.Println("here are duplicates")
 	// print tabbed
@@ -73,7 +73,7 @@ func printDuplicates(dups *dupfinder.Groups) {
 		}
 		fmt.Printf("l:%d: s:%v\n", fg[0].Stats.Size(), fg[0].Md5sum)
 		for _, f := range fg {
-			fmt.Printf("        %s\n", f.FullName)
+			fmt.Printf("        %s, %d\n", f.FullName, f.SiblingsCount)
 		}
 	}
 }
