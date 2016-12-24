@@ -1,0 +1,121 @@
+{{define "title"}}choose dirs{{end}}
+{{define "head"}}
+        <script src="https://code.jquery.com/jquery-1.9.1.min.js"></script>
+        <script>
+	var dirsSearch = new Object();
+	var dirsExclude = new Object();
+	var currentDir = "";
+	function startDelDup() {
+	    var form = $('<form></form>');
+
+	    form.attr("method", "post");
+	    form.attr("action", "/dups");	// dups	// printPost
+
+   	    for(var key in dirsSearch) {
+		    var field = $('<input></input>');
+		    field.attr("type", "hidden");
+		    field.attr("name", "dir");
+		    field.attr("value", key);
+		    form.append(field);
+	    }
+   	    for(var key in dirsExclude) {
+		    var field = $('<input></input>');
+		    field.attr("type", "hidden");
+		    field.attr("name", "exclude");
+		    field.attr("value", key);
+		    form.append(field);
+	    }
+
+	    // The form needs to be a part of the document in
+	    // order for us to be able to submit it.
+	    $(document.body).append(form);
+	    form.submit();
+	}
+	function addSearchDir() {
+	    dirsSearch[currentDir] = 1;
+	    displaySearchDir();
+	}
+	function addExcludeDir() {
+	    dirsExclude[currentDir] = 1;
+	    displayExcludeDir();
+	}
+	function removeSearchDir(d) {
+	    dirsSearch[d] = 0;
+	    displaySearchDir();
+	}
+	function removeExcludeDir(d) {
+	    dirsExclude[d] = 0;
+	    displayExcludeDir();
+	}
+	function displaySearchDir() {
+	    var s = "";
+	    for(var key in dirsSearch) {
+		// alert("key = " + key + " value = " + dirsSearch[key])
+		if (dirsSearch[key] == 1) {
+		    s += "<li class='liDir' onclick='removeSearchDir(\"" + key + "\")'>" + key + "</li>";
+		}
+	    }
+	    // alert("s=" + s);
+	    document.getElementById("liSelectedSearchDir").innerHTML = s;
+	}
+	function displayExcludeDir() {
+	    var s = "";
+	    for(key in dirsExclude) {
+		if (dirsExclude[key] == 1) {
+		    s += "<li class='liDir' onclick='removeExcludeDir(\"" + key + "\")'>" + key + "</li>";
+		}
+	    }
+	    document.getElementById("liSelectedExcludeDir").innerHTML = s;
+	}
+	$(document).ready(function(){
+	    // alert("ready");
+	    // $.post("/searchDir", { dir: "` + rootDir + `" },
+	    $.post("/searchDir", { dir: "/" },
+		    function(data, status){
+			document.getElementById("searchDir").innerHTML = data;
+			// alert("Data: " + data + "\nStatus: " + status);
+		});
+	});
+	function loadDir(dirName) {
+	    // alert("send req for " + dirName)
+	    $.post("/searchDir", { dir: dirName },
+		    function(data, status){
+			currentDir = dirName
+			document.getElementById("searchDir").innerHTML = data;
+			// alert("Data: " + data + "\nStatus: " + status);
+		});
+	}        
+	</script>
+        {{end}}
+
+        {{define "content"}}
+        <div class="row">
+          <div class="col-lg-3">
+            <button class="btn btn-primary buttonAddDirs btn-block" onclick=addSearchDir()>Add to search dirs</button>
+          </div>
+          <div class="col-lg-3">
+            <button class="btn btn-warning buttonAddDirs btn-block" onclick=addExcludeDir()>Add to exclude dirs</button>
+          </div>
+          <div class="col-lg-3">
+            <button class="btn btn-success buttonStart btn-block" onclick=startDelDup()>Start looking for duplicates</button>
+          </div>
+          <div class="col-lg-3">
+            <button class="btn btn-danger buttonExit btn-block" onclick=exitProgram()>Exit</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-lg-6">
+            <h3>Search dirs:</h3>
+            <div id="liSelectedSearchDir">
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <h3>Exclude dirs:</h3>
+            <div id="liSelectedExcludeDir">
+            </div>
+          </div>
+        </div>
+        <h1>Choose dir<br />----------------------------</h1>
+    <div id="searchDir">
+    </div>
+{{end}}

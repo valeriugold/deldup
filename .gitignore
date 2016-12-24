@@ -31,5 +31,6 @@ deldupcmd
 deldup.cache
 webif
 webver
+!webver/
 webver-start.sh
 zzz

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"html/template"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -21,55 +19,57 @@ import (
 	"time"
 
 	"github.com/valeriugold/deldup/dupfinder"
+	"github.com/valeriugold/deldup/dupfinder/webver/vviews"
 )
 
 var cacheFileName string
 var baseDir string = ``
+var startDir string = ``
 
-const cssRules = `
-<style>
-button {
-    border: 2px solid;
-    color: white;
-    cursor: pointer;
-    padding: 15px 32px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-}
-.liDir {
-    cursor: pointer;
-}
-.buttonAddDirs {
-    background-color: #808080;; /* Gray */
-}
-.buttonStart {
-    background-color: #4CAF50; /* Green */
-}
-.buttonExit {
-    background-color: 	#000000; /* Black */
-    float: right;
-}
-.buttondel {
-    background-color: #f44336;; /* Red */
-}
-.buttoncancel {
-    background-color: #4CAF50; /* Green */
-}
-</style>
-<script>
-function exitProgram() {
-    var form = $('<form></form>');
-    form.attr("method", "post");
-    form.attr("action", "/exitNow");
-    // The form needs to be a part of the document in
-    // order for us to be able to submit it.
-    $(document.body).append(form);
-    form.submit();
-}
-</script>
-`
+// const cssRules = `
+// <style>
+// button {
+//     border: 2px solid;
+//     color: white;
+//     cursor: pointer;
+//     padding: 15px 32px;
+//     text-align: center;
+//     text-decoration: none;
+//     display: inline-block;
+//     font-size: 16px;
+// }
+// .liDir {
+//     cursor: pointer;
+// }
+// .buttonAddDirs {
+//     background-color: #808080;; /* Gray */
+// }
+// .buttonStart {
+//     background-color: #4CAF50; /* Green */
+// }
+// .buttonExit {
+//     background-color: 	#000000; /* Black */
+//     float: right;
+// }
+// .buttondel {
+//     background-color: #f44336;; /* Red */
+// }
+// .buttoncancel {
+//     background-color: #4CAF50; /* Green */
+// }
+// </style>
+// <script>
+// function exitProgram() {
+//     var form = $('<form></form>');
+//     form.attr("method", "post");
+//     form.attr("action", "/exitNow");
+//     // The form needs to be a part of the document in
+//     // order for us to be able to submit it.
+//     $(document.body).append(form);
+//     form.submit();
+// }
+// </script>
+// `
 
 func handlerExitNow(w http.ResponseWriter, r *http.Request) {
 	os.Exit(0)
@@ -118,7 +118,7 @@ func handlerFindDuplicates(w http.ResponseWriter, r *http.Request) {
 			sq.excludeNames[d] = true
 		}
 	}
-	fmt.Printf("handlerFindDuplicates: dirs:%q\nexclude:%q\n", sq.dirNames, sq.excludeNames)
+	fmt.Printf("handlerFindDuplicates: dirs:%v\nexclude:%v\n", sq.dirNames, sq.excludeNames)
 	dups := dupfinder.GetDups(&sq.dirNames, &sq.excludeNames, cacheFileName)
 
 	// dups.SortCustom(dupfinder.SortBySize)
@@ -143,124 +143,138 @@ What dirs to exclude?<br>
 
 // display the page containing the dir browser; it will be refreshed by Ajax calling handlerDirBrowserAjax
 func handlerDirBrowserPage(w http.ResponseWriter, r *http.Request) {
-	const htmlDirBrowser = `<!DOCTYPE html>
-<html lang="en">
-    <head><title>Choose dir</title>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-` + cssRules + `
-        <script src="https://code.jquery.com/jquery-1.9.1.min.js"></script>
-        <script>
-	var dirsSearch = new Object();
-	var dirsExclude = new Object();
-	var currentDir = "/";
-	function startDelDup() {
-	    var form = $('<form></form>');
+	// rootDir := "/" // linux and OSX
+	// if len(startDir) > 0 {
+	// 	rootDir = startDir
+	// } else if runtime.GOOS == "windows" {
+	// 	rootDir = `c:/`
+	// }
+	// switch runtime.GOOS {
+	// case "windows":
+	// case "linux":
+	// case "darwin":
+	// default:
+	// }
 
-	    form.attr("method", "post");
-	    form.attr("action", "/dups");	// dups	// printPost
+	// 	htmlDirBrowser := `<!DOCTYPE html>
+	// <html lang="en">
+	//     <head><title>Choose dir</title>
+	//         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	// ` + cssRules + `
+	//         <script src="https://code.jquery.com/jquery-1.9.1.min.js"></script>
+	//         <script>
+	// 	var dirsSearch = new Object();
+	// 	var dirsExclude = new Object();
+	// 	var currentDir = "";
+	// 	function startDelDup() {
+	// 	    var form = $('<form></form>');
 
-   	    for(var key in dirsSearch) {
-		    var field = $('<input></input>');
-		    field.attr("type", "hidden");
-		    field.attr("name", "dir");
-		    field.attr("value", key);
-		    form.append(field);
-	    }
-   	    for(var key in dirsExclude) {
-		    var field = $('<input></input>');
-		    field.attr("type", "hidden");
-		    field.attr("name", "exclude");
-		    field.attr("value", key);
-		    form.append(field);
-	    }
+	// 	    form.attr("method", "post");
+	// 	    form.attr("action", "/dups");	// dups	// printPost
 
-	    // The form needs to be a part of the document in
-	    // order for us to be able to submit it.
-	    $(document.body).append(form);
-	    form.submit();
-	}
-	function addSearchDir() {
-	    dirsSearch[currentDir] = 1;
-	    displaySearchDir();
-	}
-	function addExcludeDir() {
-	    dirsExclude[currentDir] = 1;
-	    displayExcludeDir();
-	}
-	function removeSearchDir(d) {
-	    dirsSearch[d] = 0;
-	    displaySearchDir();
-	}
-	function removeExcludeDir(d) {
-	    dirsExclude[d] = 0;
-	    displayExcludeDir();
-	}
-	function displaySearchDir() {
-	    var s = "";
-	    for(var key in dirsSearch) {
-		// alert("key = " + key + " value = " + dirsSearch[key])
-		if (dirsSearch[key] == 1) {
-		    s += "<li class='liDir' onclick='removeSearchDir(\"" + key + "\")'>" + key + "</li>";
-		}
-	    }
-	    // alert("s=" + s);
-	    document.getElementById("liSelectedSearchDir").innerHTML = s;
-	}
-	function displayExcludeDir() {
-	    var s = "";
-	    for(key in dirsExclude) {
-		if (dirsExclude[key] == 1) {
-		    s += "<li class='liDir' onclick='removeExcludeDir(\"" + key + "\")'>" + key + "</li>";
-		}
-	    }
-	    document.getElementById("liSelectedExcludeDir").innerHTML = s;
-	}
-	$(document).ready(function(){
-	    // alert("ready");
-	    $.post("/searchDir", { dir: "/" },
-		    function(data, status){
-			document.getElementById("searchDir").innerHTML = data;
-			// alert("Data: " + data + "\nStatus: " + status);
-		});
-	});
-	function loadDir(dirName) {
-	    // alert("send req for " + dirName)
-	    $.post("/searchDir", { dir: dirName },
-		    function(data, status){
-			currentDir = dirName
-			document.getElementById("searchDir").innerHTML = data;
-			// alert("Data: " + data + "\nStatus: " + status);
-		});
-	}        
-	</script>
-    </head>
-    <body>
-    <button class="buttonAddDirs" onclick=addSearchDir()>Add to search dirs</button>
-    <button class="buttonAddDirs" onclick=addExcludeDir()>Add to exclude dirs</button>
-    <button class="buttonStart" onclick=startDelDup()>Start looking for duplicates</button>
-    <button class="buttonExit" onclick=exitProgram()>Exit!</button>
-    <h3>Search dirs:</h3>
-    <div id="liSelectedSearchDir">
-    </div>
-    <h3>Exclude dirs:</h3>
-    <div id="liSelectedExcludeDir">
-    </div>
-    <h1>Choose dir<br />----------------------------</h1>
-    <div id="searchDir">
-    </div>
-    
-    </body>
-</html>
-`
-	w.Write([]byte(htmlDirBrowser))
+	//    	    for(var key in dirsSearch) {
+	// 		    var field = $('<input></input>');
+	// 		    field.attr("type", "hidden");
+	// 		    field.attr("name", "dir");
+	// 		    field.attr("value", key);
+	// 		    form.append(field);
+	// 	    }
+	//    	    for(var key in dirsExclude) {
+	// 		    var field = $('<input></input>');
+	// 		    field.attr("type", "hidden");
+	// 		    field.attr("name", "exclude");
+	// 		    field.attr("value", key);
+	// 		    form.append(field);
+	// 	    }
+
+	// 	    // The form needs to be a part of the document in
+	// 	    // order for us to be able to submit it.
+	// 	    $(document.body).append(form);
+	// 	    form.submit();
+	// 	}
+	// 	function addSearchDir() {
+	// 	    dirsSearch[currentDir] = 1;
+	// 	    displaySearchDir();
+	// 	}
+	// 	function addExcludeDir() {
+	// 	    dirsExclude[currentDir] = 1;
+	// 	    displayExcludeDir();
+	// 	}
+	// 	function removeSearchDir(d) {
+	// 	    dirsSearch[d] = 0;
+	// 	    displaySearchDir();
+	// 	}
+	// 	function removeExcludeDir(d) {
+	// 	    dirsExclude[d] = 0;
+	// 	    displayExcludeDir();
+	// 	}
+	// 	function displaySearchDir() {
+	// 	    var s = "";
+	// 	    for(var key in dirsSearch) {
+	// 		// alert("key = " + key + " value = " + dirsSearch[key])
+	// 		if (dirsSearch[key] == 1) {
+	// 		    s += "<li class='liDir' onclick='removeSearchDir(\"" + key + "\")'>" + key + "</li>";
+	// 		}
+	// 	    }
+	// 	    // alert("s=" + s);
+	// 	    document.getElementById("liSelectedSearchDir").innerHTML = s;
+	// 	}
+	// 	function displayExcludeDir() {
+	// 	    var s = "";
+	// 	    for(key in dirsExclude) {
+	// 		if (dirsExclude[key] == 1) {
+	// 		    s += "<li class='liDir' onclick='removeExcludeDir(\"" + key + "\")'>" + key + "</li>";
+	// 		}
+	// 	    }
+	// 	    document.getElementById("liSelectedExcludeDir").innerHTML = s;
+	// 	}
+	// 	$(document).ready(function(){
+	// 	    // alert("ready");
+	// 	    $.post("/searchDir", { dir: "` + rootDir + `" },
+	// 		    function(data, status){
+	// 			document.getElementById("searchDir").innerHTML = data;
+	// 			// alert("Data: " + data + "\nStatus: " + status);
+	// 		});
+	// 	});
+	// 	function loadDir(dirName) {
+	// 	    // alert("send req for " + dirName)
+	// 	    $.post("/searchDir", { dir: dirName },
+	// 		    function(data, status){
+	// 			currentDir = dirName
+	// 			document.getElementById("searchDir").innerHTML = data;
+	// 			// alert("Data: " + data + "\nStatus: " + status);
+	// 		});
+	// 	}
+	// 	</script>
+	//     </head>
+	//     <body>
+	//     <button class="buttonAddDirs" onclick=addSearchDir()>Add to search dirs</button>
+	//     <button class="buttonAddDirs" onclick=addExcludeDir()>Add to exclude dirs</button>
+	//     <button class="buttonStart" onclick=startDelDup()>Start looking for duplicates</button>
+	//     <button class="buttonExit" onclick=exitProgram()>Exit</button>
+	//     <h3>Search dirs:</h3>
+	//     <div id="liSelectedSearchDir">
+	//     </div>
+	//     <h3>Exclude dirs:</h3>
+	//     <div id="liSelectedExcludeDir">
+	//     </div>
+	//     <h1>Choose dir<br />----------------------------</h1>
+	//     <div id="searchDir">
+	//     </div>
+
+	//     </body>
+	// </html>
+	// `
+	// w.Write([]byte(htmlDirBrowser))
+	vviews.ChooseDirs(w)
 }
 
 func handlerDirBrowserAjax(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("already in handlerDirBrowserAjax\n")
 	url := html.UnescapeString(r.FormValue("dir"))
-	urlPath := baseDir + url
+	urlPath := path.Join(baseDir, url)
 
-	fmt.Printf("current path is %s\n", urlPath)
+	fmt.Printf("current path is %s, base=%s, url=%s\n", urlPath, baseDir, url)
 	if fi, err := os.Stat(urlPath); err != nil {
 		reportError(w, err)
 		return
@@ -309,6 +323,7 @@ func handlerDirBrowserAjax(w http.ResponseWriter, r *http.Request) {
 
 	d.CurrentDir = url
 	d.ParentDir = filepath.Dir(d.CurrentDir)
+	fmt.Printf("parent dir = %s, current=%s\n", d.ParentDir, d.CurrentDir)
 
 	// Have enough info to figure out what to send back
 	files, err := ioutil.ReadDir(urlPath)
@@ -344,29 +359,33 @@ func handlerDirBrowserAjax(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("curreent=%s, urlPath=%s\n", d.CurrentDir, urlPath)
 	fmt.Printf("len=%d, dirs=%q\n", len(d.Dirs), d.Dirs)
 	// funcMap := template.FuncMap{
-	// 	"escape": func(s string) string { return html.EscapeString(s) },
+	// 	"escapeBackSlash": func(s string) string {
+	// 		r, _ := regexp.Compile(`\\+`)
+	// 		return r.ReplaceAllLiteralString(s, `\`)
+	// 	},
 	// }
-	const htmlDirBrowser = `
-        {{ $d := .CurrentDir }}
-        <h2>current dir: {{html $d}}</h2>
-        <ul>
-        	<li class="liDir" onclick='loadDir("{{html .ParentDir}}")'>[d] ..</li>
-        	{{range .Dirs}}
-        	    <li class="liDir" onclick='loadDir("{{if ne $d "/"}}{{html $d}}{{end}}/{{html .}}")'>[d] {{.}}</li>
-        	{{end}}
-        	{{range .Files}}
-        	    <li>[ ]{{html .}}</li>
-        	{{end}}
-        </ul>
-`
+	// 	const htmlDirBrowser = `
+	//         {{ $d := .CurrentDir }}
+	//         <h2>current dir: {{html $d}}</h2>
+	//         <ul>
+	//         	<li class="liDir" onclick="loadDir('{{ escapeBackSlash .ParentDir | html }}')">[d] ..</li>
+	//         	{{range .Dirs}}
+	//         	    <li class="liDir" onclick='loadDir("{{if ne $d "/"}}{{ escapeBackSlash $d | html }}{{end}}/{{html .}}")'>[d] {{.}}</li>
+	//         	{{end}}
+	//         	{{range .Files}}
+	//         	    <li>[ ]{{html .}}</li>
+	//         	{{end}}
+	//         </ul>
+	// `
 
+	vviews.AjaxDirBrowser(w, d)
 	// th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(htmlDirBrowser))
-	th := template.Must(template.New("dupfiles2").Parse(htmlDirBrowser))
-	err = th.Execute(w, d)
-	if err != nil {
-		fmt.Fprintln(w, "executing template:", err)
-		os.Exit(1)
-	}
+	// //th := template.Must(template.New("dupfiles2").Parse(htmlDirBrowser))
+	// err = th.Execute(w, d)
+	// if err != nil {
+	// 	fmt.Fprintln(w, "executing template:", err)
+	// 	os.Exit(1)
+	// }
 }
 
 func main() {
@@ -375,8 +394,21 @@ func main() {
 		fmt.Print("the current dir could not be found, use /tmp/")
 		cacheFileName = "/tmp/dupfinder.cache"
 	} else {
-		cacheFileName = dir + "/dupfinder.cache"
+		cacheFileName = path.Join(dir, "dupfinder.cache")
 	}
+	if len(os.Args) > 1 {
+		startDir = os.Args[1]
+	}
+	vviews.Init()
+	http.Handle("/bootstrap/css/", http.StripPrefix("/bootstrap/css/", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css"))))
+	http.Handle("/bootstrap/js/", http.StripPrefix("/bootstrap/js/", http.FileServer(http.Dir("bootstrap-3.3.7-dist/js"))))
+	// http.Handle("/bootstrap/css/", http.StripPrefix("/bootstrap/css/", http.FileServer(http.Dir("/Users/valeriug/dev/go/src/github.com/valeriugold/deldup/dupfinder/webver/bootstrap-3.3.7-dist")))
+	// http.Handle("/bcss/", http.FileServer(http.Dir("/Users/valeriug/dev/go/src/github.com/valeriugold/deldup/dupfinder/webver/bootstrap-3.3.7-dist/css")))
+	// http.Handle("/x", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css")))
+	// http.Handle("/", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css")))
+	http.Handle("/y/", http.StripPrefix("/y/", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css"))))
+	// http.HandleFunc("/y", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css")))
+	// http.HandleFunc("/", http.FileServer(http.Dir("bootstrap-3.3.7-dist/css")))
 	http.HandleFunc("/deldup", handlerGetDirsPlainForm)
 	http.HandleFunc("/dups", handlerFindDuplicates)
 	http.HandleFunc("/delfiles", handlerDeletePostFiles)
@@ -390,94 +422,95 @@ func main() {
 	log.Fatal(err)
 }
 
-func getHTMLTableFromGroups(g *dupfinder.Groups, w io.Writer) {
-	funcMap := template.FuncMap{
-		"length": func(x dupfinder.FilesGroup) int { return len(x) },
-		"dir":    func(x dupfinder.FilesGroup) string { return filepath.Dir(x[0].FullName) },
-		"size":   func(x dupfinder.FilesGroup) int64 { return x[0].Stats.Size() },
-	}
-	const cht = `
-<!DOCTYPE html>
-<html>
-<head>
-` + cssRules + `
-<style>
-table {
-    border-collapse: collapse;
-    width: 100%;
-}
+func getHTMLTableFromGroups(g *dupfinder.Groups, w http.ResponseWriter) {
+	// funcMap := template.FuncMap{
+	// 	"length": func(x dupfinder.FilesGroup) int { return len(x) },
+	// 	"dir":    func(x dupfinder.FilesGroup) string { return filepath.Dir(x[0].FullName) },
+	// 	"size":   func(x dupfinder.FilesGroup) int64 { return x[0].Stats.Size() },
+	// }
+	// 	const cht = `
+	// <!DOCTYPE html>
+	// <html>
+	// <head>
+	// ` + cssRules + `
+	// <style>
+	// table {
+	//     border-collapse: collapse;
+	//     width: 100%;
+	// }
 
-th, td {
-    text-align: left;
-    padding: 8px;
-}
+	// th, td {
+	//     text-align: left;
+	//     padding: 8px;
+	// }
 
-tr:nth-child(even){background-color: #f2f2f2}
+	// tr:nth-child(even){background-color: #f2f2f2}
 
-th {
-    background-color: #4CAF50;
-    color: white;
-}
+	// th {
+	//     background-color: #4CAF50;
+	//     color: white;
+	// }
 
-tr:hover {
-    background-color: #ffff99;
-}
+	// tr:hover {
+	//     background-color: #ffff99;
+	// }
 
-td:hover {
-    background-color: #33FFFC;
-}
-</style>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
-<script>
-var mapFiles = new Map()
-function toggleDelete(el, fileName) {
-    if (mapFiles.has(fileName)) {
-	el.style.color = 'black';
-	mapFiles.delete(fileName);
-    } else {
-	el.style.color = 'red';
-	mapFiles.set(fileName, 1);
-    }
-}
-function apply() {
-    var files = []
-    for (var key of mapFiles.keys()) {
-	console.log(key);
-	files.push(key)
-    }
-    // window.alert(files)
-    $.post('/delfiles', {'deleteTheseFiles': files});
-    location.reload();
-}
-function cancel() {
-    mapFiles.clear();
-    location.reload();
-}
-</script>
-</head>
-<body>
+	// td:hover {
+	//     background-color: #33FFFC;
+	// }
+	// </style>
+	// <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+	// <script>
+	// var mapFiles = new Map()
+	// function toggleDelete(el, fileName) {
+	//     if (mapFiles.has(fileName)) {
+	// 	el.style.color = 'black';
+	// 	mapFiles.delete(fileName);
+	//     } else {
+	// 	el.style.color = 'red';
+	// 	mapFiles.set(fileName, 1);
+	//     }
+	// }
+	// function apply() {
+	//     var files = []
+	//     for (var key of mapFiles.keys()) {
+	// 	console.log(key);
+	// 	files.push(key)
+	//     }
+	//     // window.alert(files)
+	//     $.post('/delfiles', {'deleteTheseFiles': files});
+	//     location.reload();
+	// }
+	// function cancel() {
+	//     mapFiles.clear();
+	//     location.reload();
+	// }
+	// </script>
+	// </head>
+	// <body>
 
-<h2>Duplicate files</h2>
+	// <h2>Duplicate files</h2>
 
-<table border=3>
-<tr><th>size</th><th colspan="2">identical files</th></tr>
-{{range .}}
-<tr><td>{{size .}}</td>{{range .}}<td onclick="toggleDelete(this, '{{.FullName}}')">{{.FullName}} </td>{{end}}</tr>
-{{end}}</table>
+	// <table border=3>
+	// <tr><th>size</th><th colspan="2">identical files</th></tr>
+	// {{range .}}
+	// <tr><td>{{size .}}</td>{{range .}}<td onclick="toggleDelete(this, '{{.FullName}}')">{{.FullName}} </td>{{end}}</tr>
+	// {{end}}</table>
 
-<button class="buttondel" onclick="apply()">Delete Files</button>
-<button class="buttoncancel" onclick="cancel()">Cancel</button>
-<button class="buttonExit" onclick=exitProgram()>Exit!</button>
-</body>
-</html>
-`
-	th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(cht))
-	// err2 := th.Execute(os.Stdout, g)
-	err2 := th.Execute(w, g)
-	if err2 != nil {
-		fmt.Fprintln(w, "executing template:", err2)
-		os.Exit(1)
-	}
+	// <button class="buttondel" onclick="apply()">Delete Files</button>
+	// <button class="buttoncancel" onclick="cancel()">Cancel</button>
+	// <button class="buttonExit" onclick=exitProgram()>Exit</button>
+	// </body>
+	// </html>
+	// `
+	vviews.Duplicates(w, g)
+	// th := template.Must(template.New("dupfiles2").Funcs(funcMap).Parse(cht))
+	// // err2 := th.Execute(os.Stdout, g)
+	// err2 := th.Execute(w, g)
+	// if err2 != nil {
+	// 	fmt.Fprintln(w, "executing template:", err2)
+	// 	os.Exit(1)
+	// }
 }
 
 func printDuplicates(dups *dupfinder.Groups) {

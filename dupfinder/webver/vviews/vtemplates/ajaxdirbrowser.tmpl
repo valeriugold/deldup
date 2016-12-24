@@ -1,0 +1,13 @@
+{{define "ajaxdirbrowser"}}
+        {{ $d := .CurrentDir }}
+        <h2>current dir: {{html $d}}</h2>
+        <ul>
+        	<li class="liDir" onclick="loadDir('{{ escapeBackSlash .ParentDir | html }}')">[d] ..</li>
+        	{{range .Dirs}}
+        	    <li class="liDir" onclick='loadDir("{{if ne $d "/"}}{{ escapeBackSlash $d | html }}{{end}}/{{html .}}")'>[d] {{.}}</li>
+        	{{end}}
+        	{{range .Files}}
+        	    <li>[ ]{{html .}}</li>
+        	{{end}}
+        </ul>
+{{end}}

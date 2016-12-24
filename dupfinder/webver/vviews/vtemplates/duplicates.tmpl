@@ -1,0 +1,71 @@
+{{define "title"}}duplicates{{end}}
+{{define "head"}}
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th, td {
+    text-align: left;
+    padding: 8px;
+}
+
+tr:nth-child(even){background-color: #f2f2f2}
+
+th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+tr:hover {
+    background-color: #ffff99;
+}
+
+td:hover {
+    background-color: #33FFFC;
+}
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script>
+var mapFiles = new Map()
+function toggleDelete(el, fileName) {
+    if (mapFiles.has(fileName)) {
+	el.style.color = 'black';
+	mapFiles.delete(fileName);
+    } else {
+	el.style.color = 'red';
+	mapFiles.set(fileName, 1);
+    }
+}
+function apply() {
+    var files = []
+    for (var key of mapFiles.keys()) {
+	console.log(key);
+	files.push(key)
+    }
+    // window.alert(files)
+    $.post('/delfiles', {'deleteTheseFiles': files});
+    location.reload();
+}
+function cancel() {
+    mapFiles.clear();
+    location.reload();
+}
+</script>
+{{end}}
+
+{{define "content"}}
+
+<h2>Duplicate files</h2>
+
+<table border=3>
+<tr><th>size</th><th colspan="2">identical files</th></tr>
+{{range .}}
+<tr><td>{{size .}}</td>{{range .}}<td onclick="toggleDelete(this, '{{.FullName}}')">{{.FullName}} </td>{{end}}</tr>
+{{end}}</table>
+
+<button class="buttondel" onclick="apply()">Delete Files</button>
+<button class="buttoncancel" onclick="cancel()">Cancel</button>
+<button class="buttonExit" onclick=exitProgram()>Exit</button>
+
+{{end}}
