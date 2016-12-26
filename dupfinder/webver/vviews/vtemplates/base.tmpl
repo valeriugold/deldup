@@ -46,6 +46,16 @@
             form.submit();
         }
     </script>
+    <style>
+      <!-- add style to move the body under the navbar -->
+      body {
+      padding-top: 50px;
+      }
+      .starter-template {
+      padding: 40px 15px;
+      text-align: center;
+      }
+    </style>
 
     
     {{template "head" .}}
@@ -68,20 +78,18 @@
             <li class="active"><a href="#">Home</a></li>
             <li><a href="#about">About</a></li>
             <li><a href="#contact">Contact</a></li>
+            <li><a href="exitNow">Exit</a></li>
           </ul>
         </div><!--/.nav-collapse -->
       </div>
     </nav>
 
-    <div class="container">
+    <div class="container-fluid">
       <div class="starter-template">
-        <h1>Bootstrap starter template</h1>
-        <p class="lead">Use this document as a way to quickly start any new project.<br> All you get is this text and a mostly barebones HTML document.</p>
+        <h1>Duplicate finder and remover</h1>
+        <p class="lead">Use this program to find duplicates in the desired directories<br> You can also exclude directories from the search path.</p>
       </div>
 
-    </div><!-- /.container -->
-
-    <div class="container-fluid">
       {{template "content" .}}
     </div>
 

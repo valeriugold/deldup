@@ -52,7 +52,7 @@
 	    for(var key in dirsSearch) {
 		// alert("key = " + key + " value = " + dirsSearch[key])
 		if (dirsSearch[key] == 1) {
-		    s += "<li class='liDir' onclick='removeSearchDir(\"" + key + "\")'>" + key + "</li>";
+		    s += "<li class='list-group-item' onclick='removeSearchDir(\"" + key + "\")'>" + key + "</li>";
 		}
 	    }
 	    // alert("s=" + s);
@@ -62,7 +62,7 @@
 	    var s = "";
 	    for(key in dirsExclude) {
 		if (dirsExclude[key] == 1) {
-		    s += "<li class='liDir' onclick='removeExcludeDir(\"" + key + "\")'>" + key + "</li>";
+		    s += "<li class='list-group-item' onclick='removeExcludeDir(\"" + key + "\")'>" + key + "</li>";
 		}
 	    }
 	    document.getElementById("liSelectedExcludeDir").innerHTML = s;
@@ -86,33 +86,36 @@
 		});
 	}        
 	</script>
-        {{end}}
+        <style>
+          .liDirEl
+          {
+          padding: 0px;
+          }
+        </style>
+{{end}}
 
-        {{define "content"}}
+{{define "content"}}
         <div class="row">
-          <div class="col-lg-3">
+          <div class="col-sm-4">
             <button class="btn btn-primary buttonAddDirs btn-block" onclick=addSearchDir()>Add to search dirs</button>
           </div>
-          <div class="col-lg-3">
+          <div class="col-sm-4">
             <button class="btn btn-warning buttonAddDirs btn-block" onclick=addExcludeDir()>Add to exclude dirs</button>
           </div>
-          <div class="col-lg-3">
+          <div class="col-sm-4">
             <button class="btn btn-success buttonStart btn-block" onclick=startDelDup()>Start looking for duplicates</button>
-          </div>
-          <div class="col-lg-3">
-            <button class="btn btn-danger buttonExit btn-block" onclick=exitProgram()>Exit</button>
           </div>
         </div>
         <div class="row">
           <div class="col-lg-6">
             <h3>Search dirs:</h3>
-            <div id="liSelectedSearchDir">
-            </div>
+            <ul class="list-group" id="liSelectedSearchDir">
+            </ul>
           </div>
           <div class="col-lg-6">
             <h3>Exclude dirs:</h3>
-            <div id="liSelectedExcludeDir">
-            </div>
+            <ul class="list-group" id="liSelectedExcludeDir">
+            </ul>
           </div>
         </div>
         <h1>Choose dir<br />----------------------------</h1>

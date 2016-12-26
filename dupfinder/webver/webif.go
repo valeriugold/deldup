@@ -26,51 +26,6 @@ var cacheFileName string
 var baseDir string = ``
 var startDir string = ``
 
-// const cssRules = `
-// <style>
-// button {
-//     border: 2px solid;
-//     color: white;
-//     cursor: pointer;
-//     padding: 15px 32px;
-//     text-align: center;
-//     text-decoration: none;
-//     display: inline-block;
-//     font-size: 16px;
-// }
-// .liDir {
-//     cursor: pointer;
-// }
-// .buttonAddDirs {
-//     background-color: #808080;; /* Gray */
-// }
-// .buttonStart {
-//     background-color: #4CAF50; /* Green */
-// }
-// .buttonExit {
-//     background-color: 	#000000; /* Black */
-//     float: right;
-// }
-// .buttondel {
-//     background-color: #f44336;; /* Red */
-// }
-// .buttoncancel {
-//     background-color: #4CAF50; /* Green */
-// }
-// </style>
-// <script>
-// function exitProgram() {
-//     var form = $('<form></form>');
-//     form.attr("method", "post");
-//     form.attr("action", "/exitNow");
-//     // The form needs to be a part of the document in
-//     // order for us to be able to submit it.
-//     $(document.body).append(form);
-//     form.submit();
-// }
-// </script>
-// `
-
 func handlerExitNow(w http.ResponseWriter, r *http.Request) {
 	os.Exit(0)
 }

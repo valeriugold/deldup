@@ -1,13 +1,13 @@
 {{define "ajaxdirbrowser"}}
         {{ $d := .CurrentDir }}
         <h2>current dir: {{html $d}}</h2>
-        <ul>
-        	<li class="liDir" onclick="loadDir('{{ escapeBackSlash .ParentDir | html }}')">[d] ..</li>
+        <div class="list-group">
+        	<a href="#" class="liDirEl list-group-item" onclick="loadDir('{{ escapeBackSlash .ParentDir | html }}')">[d] ..</a>
         	{{range .Dirs}}
-        	    <li class="liDir" onclick='loadDir("{{if ne $d "/"}}{{ escapeBackSlash $d | html }}{{end}}/{{html .}}")'>[d] {{.}}</li>
+        	    <a href="#" class="liDirEl list-group-item" onclick='loadDir("{{if ne $d "/"}}{{ escapeBackSlash $d | html }}{{end}}/{{html .}}")'>[d] {{.}}</a>
         	{{end}}
         	{{range .Files}}
-        	    <li>[ ]{{html .}}</li>
+        	    <a href="#" class="liDirEl list-group-item disabled">[ ]{{html .}}</a>
         	{{end}}
-        </ul>
+        </div>
 {{end}}
